@@ -1,5 +1,9 @@
-import org.example.dao.UserDao;
+
+import org.example.dto.CreateUserRequest;
+import org.example.dto.UpdateUserRequest;
+import org.example.dto.UserDto;
 import org.example.model.User;
+import org.example.repository.UserRepository;
 import org.example.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -7,13 +11,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -21,195 +25,191 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
 
     @Mock
-    private UserDao userDao;
+    private UserRepository userRepository;
 
     private UserService userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserService();
-        try {
-            var field = UserService.class.getDeclaredField("userDao");
-            field.setAccessible(true);
-            field.set(userService, userDao);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to inject mock UserDao", e);
-        }
+        userService = new UserService(userRepository);
     }
 
     @Test
     void createUser_ShouldCreateUser_WhenEmailIsUnique() {
         // Arrange
-        String name = "John Doe";
-        String email = "john@example.com";
-        Integer age = 30;
-        User expectedUser = new User(name, email, age);
-        expectedUser.setId(1L);
+        CreateUserRequest request = new CreateUserRequest("John Doe", "john@example.com", 30);
+        User savedUser = new User("John Doe", "john@example.com", 30);
+        savedUser.setId(1L);
+        savedUser.setCreatedAt(LocalDateTime.now());
 
-        when(userDao.findByEmail(email)).thenReturn(Optional.empty());
-        when(userDao.save(any(User.class))).thenReturn(expectedUser);
+        when(userRepository.existsByEmail("john@example.com")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenReturn(savedUser);
 
         // Act
-        User createdUser = userService.createUser(name, email, age);
+        UserDto result = userService.createUser(request);
 
         // Assert
-        assertNotNull(createdUser);
-        assertEquals(name, createdUser.getName());
-        assertEquals(email, createdUser.getEmail());
-        assertEquals(age, createdUser.getAge());
+        assertNotNull(result);
+        assertEquals(1L, result.getId());
+        assertEquals("John Doe", result.getName());
+        assertEquals("john@example.com", result.getEmail());
+        assertEquals(30, result.getAge());
 
-        verify(userDao).findByEmail(email);
-        verify(userDao).save(any(User.class));
+        verify(userRepository).existsByEmail("john@example.com");
+        verify(userRepository).save(any(User.class));
     }
 
     @Test
     void createUser_ShouldThrowException_WhenEmailAlreadyExists() {
         // Arrange
-        String name = "John Doe";
-        String email = "existing@example.com";
-        Integer age = 30;
-        User existingUser = new User("Existing User", email, 25);
+        CreateUserRequest request = new CreateUserRequest("John Doe", "existing@example.com", 30);
 
-        when(userDao.findByEmail(email)).thenReturn(Optional.of(existingUser));
+        when(userRepository.existsByEmail("existing@example.com")).thenReturn(true);
 
         // Act & Assert
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> userService.createUser(name, email, age)
+                () -> userService.createUser(request)
         );
 
-        assertEquals("User with email " + email + " already exists", exception.getMessage());
-        verify(userDao).findByEmail(email);
-        verify(userDao, never()).save(any(User.class));
+        assertEquals("User with email existing@example.com already exists", exception.getMessage());
+        verify(userRepository).existsByEmail("existing@example.com");
+        verify(userRepository, never()).save(any(User.class));
     }
 
     @Test
     void getUserById_ShouldReturnUser_WhenUserExists() {
         // Arrange
         Long userId = 1L;
-        User expectedUser = new User("John Doe", "john@example.com", 30);
-        expectedUser.setId(userId);
+        User user = new User("John Doe", "john@example.com", 30);
+        user.setId(userId);
+        user.setCreatedAt(LocalDateTime.now());
 
-        when(userDao.findById(userId)).thenReturn(Optional.of(expectedUser));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
 
         // Act
-        Optional<User> result = userService.getUserById(userId);
+        UserDto result = userService.getUserById(userId);
 
         // Assert
-        assertTrue(result.isPresent());
-        assertEquals(userId, result.get().getId());
-        verify(userDao).findById(userId);
+        assertNotNull(result);
+        assertEquals(userId, result.getId());
+        assertEquals("John Doe", result.getName());
+        verify(userRepository).findById(userId);
     }
 
     @Test
-    void getUserById_ShouldReturnEmpty_WhenUserNotExists() {
+    void getUserById_ShouldThrowException_WhenUserNotExists() {
         // Arrange
         Long userId = 999L;
-        when(userDao.findById(userId)).thenReturn(Optional.empty());
+        when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
-        // Act
-        Optional<User> result = userService.getUserById(userId);
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> userService.getUserById(userId)
+        );
 
-        // Assert
-        assertTrue(result.isEmpty());
-        verify(userDao).findById(userId);
+        assertEquals("User not found with id: " + userId, exception.getMessage());
+        verify(userRepository).findById(userId);
     }
 
     @Test
     void getAllUsers_ShouldReturnAllUsers() {
         // Arrange
-        List<User> expectedUsers = Arrays.asList(
-                new User("User1", "user1@example.com", 25),
-                new User("User2", "user2@example.com", 30)
-        );
+        User user1 = new User("User1", "user1@example.com", 25);
+        user1.setId(1L);
+        User user2 = new User("User2", "user2@example.com", 30);
+        user2.setId(2L);
+        List<User> users = Arrays.asList(user1, user2);
 
-        when(userDao.findAll()).thenReturn(expectedUsers);
+        when(userRepository.findAll()).thenReturn(users);
 
         // Act
-        List<User> result = userService.getAllUsers();
+        List<UserDto> result = userService.getAllUsers();
 
         // Assert
         assertEquals(2, result.size());
-        verify(userDao).findAll();
+        assertEquals("User1", result.get(0).getName());
+        assertEquals("User2", result.get(1).getName());
+        verify(userRepository).findAll();
     }
 
     @Test
     void updateUser_ShouldUpdateUser_WhenValidData() {
         // Arrange
         Long userId = 1L;
-        String newName = "Updated Name";
-        String newEmail = "updated@example.com";
-        Integer newAge = 35;
+        UpdateUserRequest request = new UpdateUserRequest("Updated Name", "updated@example.com", 35);
 
         User existingUser = new User("Old Name", "old@example.com", 30);
         existingUser.setId(userId);
-        User updatedUser = new User(newName, newEmail, newAge);
+        User updatedUser = new User("Updated Name", "updated@example.com", 35);
         updatedUser.setId(userId);
 
-        when(userDao.findById(userId)).thenReturn(Optional.of(existingUser));
-        when(userDao.findByEmail(newEmail)).thenReturn(Optional.empty());
-        when(userDao.update(any(User.class))).thenReturn(updatedUser);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(existingUser));
+        when(userRepository.existsByEmail("updated@example.com")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenReturn(updatedUser);
 
         // Act
-        User result = userService.updateUser(userId, newName, newEmail, newAge);
+        UserDto result = userService.updateUser(userId, request);
 
         // Assert
-        assertEquals(newName, result.getName());
-        assertEquals(newEmail, result.getEmail());
-        assertEquals(newAge, result.getAge());
+        assertEquals("Updated Name", result.getName());
+        assertEquals("updated@example.com", result.getEmail());
+        assertEquals(35, result.getAge());
 
-        verify(userDao).findById(userId);
-        verify(userDao).findByEmail(newEmail);
-        verify(userDao).update(any(User.class));
+        verify(userRepository).findById(userId);
+        verify(userRepository).existsByEmail("updated@example.com");
+        verify(userRepository).save(any(User.class));
     }
 
     @Test
     void updateUser_ShouldThrowException_WhenUserNotFound() {
         // Arrange
         Long userId = 999L;
-        when(userDao.findById(userId)).thenReturn(Optional.empty());
+        UpdateUserRequest request = new UpdateUserRequest("Name", "email@example.com", 25);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
         // Act & Assert
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> userService.updateUser(userId, "Name", "email@example.com", 25)
+                () -> userService.updateUser(userId, request)
         );
 
         assertEquals("User not found with id: " + userId, exception.getMessage());
-        verify(userDao).findById(userId);
-        verify(userDao, never()).findByEmail(anyString());
-        verify(userDao, never()).update(any(User.class));
+        verify(userRepository).findById(userId);
+        verify(userRepository, never()).existsByEmail(anyString());
+        verify(userRepository, never()).save(any(User.class));
     }
 
     @Test
     void updateUser_ShouldThrowException_WhenEmailAlreadyExists() {
         // Arrange
         Long userId = 1L;
-        String newEmail = "existing@example.com";
+        UpdateUserRequest request = new UpdateUserRequest("New Name", "existing@example.com", 35);
+
         User existingUser = new User("Current User", "current@example.com", 30);
         existingUser.setId(userId);
-        User otherUser = new User("Other User", newEmail, 25);
 
-        when(userDao.findById(userId)).thenReturn(Optional.of(existingUser));
-        when(userDao.findByEmail(newEmail)).thenReturn(Optional.of(otherUser));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(existingUser));
+        when(userRepository.existsByEmail("existing@example.com")).thenReturn(true);
 
         // Act & Assert
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> userService.updateUser(userId, "New Name", newEmail, 35)
+                () -> userService.updateUser(userId, request)
         );
 
-        assertEquals("User with email " + newEmail + " already exists", exception.getMessage());
-        verify(userDao).findById(userId);
-        verify(userDao).findByEmail(newEmail);
-        verify(userDao, never()).update(any(User.class));
+        assertEquals("User with email existing@example.com already exists", exception.getMessage());
+        verify(userRepository).findById(userId);
+        verify(userRepository).existsByEmail("existing@example.com");
+        verify(userRepository, never()).save(any(User.class));
     }
 
     @Test
@@ -217,46 +217,56 @@ class UserServiceTest {
         // Arrange
         Long userId = 1L;
         String sameEmail = "same@example.com";
+        UpdateUserRequest request = new UpdateUserRequest("New Name", sameEmail, 35);
+
         User existingUser = new User("Old Name", sameEmail, 30);
         existingUser.setId(userId);
         User updatedUser = new User("New Name", sameEmail, 35);
         updatedUser.setId(userId);
 
-        when(userDao.findById(userId)).thenReturn(Optional.of(existingUser));
-        when(userDao.update(any(User.class))).thenReturn(updatedUser);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(existingUser));
+        when(userRepository.save(any(User.class))).thenReturn(updatedUser);
 
         // Act
-        User result = userService.updateUser(userId, "New Name", sameEmail, 35);
+        UserDto result = userService.updateUser(userId, request);
 
         // Assert
         assertEquals("New Name", result.getName());
         assertEquals(sameEmail, result.getEmail());
         assertEquals(35, result.getAge());
 
-        verify(userDao).findById(userId);
-        verify(userDao, never()).findByEmail(sameEmail); // Не проверяем email, т.к. он не изменился
-        verify(userDao).update(any(User.class));
+        verify(userRepository).findById(userId);
+        verify(userRepository, never()).existsByEmail(sameEmail);
+        verify(userRepository).save(any(User.class));
     }
 
     @Test
     void deleteUser_ShouldDeleteUser_WhenUserExists() {
         // Arrange
         Long userId = 1L;
-        doNothing().when(userDao).delete(userId);
+        when(userRepository.existsById(userId)).thenReturn(true);
+        doNothing().when(userRepository).deleteById(userId);
 
         // Act & Assert
         assertDoesNotThrow(() -> userService.deleteUser(userId));
-        verify(userDao).delete(userId);
+        verify(userRepository).existsById(userId);
+        verify(userRepository).deleteById(userId);
     }
 
     @Test
-    void deleteUser_ShouldPropagateException_WhenDaoFails() {
+    void deleteUser_ShouldThrowException_WhenUserNotFound() {
         // Arrange
-        Long userId = 1L;
-        doThrow(new RuntimeException("Database error")).when(userDao).delete(userId);
+        Long userId = 999L;
+        when(userRepository.existsById(userId)).thenReturn(false);
 
         // Act & Assert
-        assertThrows(RuntimeException.class, () -> userService.deleteUser(userId));
-        verify(userDao).delete(userId);
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> userService.deleteUser(userId)
+        );
+
+        assertEquals("User not found with id: " + userId, exception.getMessage());
+        verify(userRepository).existsById(userId);
+        verify(userRepository, never()).deleteById(userId);
     }
 }

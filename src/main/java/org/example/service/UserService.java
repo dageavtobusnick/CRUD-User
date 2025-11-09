@@ -1,66 +1,84 @@
 package org.example.service;
 
-import org.example.dao.UserDao;
-import org.example.dao.UserDaoPostgreSQL;
+import org.example.dto.CreateUserRequest;
+import org.example.dto.UpdateUserRequest;
+import org.example.dto.UserDto;
 import org.example.model.User;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.example.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
+import java.util.stream.Collectors;
 
+@Service
+@Transactional
 public class UserService {
-    private static final Logger logger = LogManager.getLogger(UserService.class);
-    private final UserDao userDao;
 
-    public UserService() {
-        this.userDao = new UserDaoPostgreSQL();
+    private final UserRepository userRepository;
+
+    @Autowired
+    public UserService(UserRepository userRepository) {
+        this.userRepository = userRepository;
     }
 
-    public User createUser(String name, String email, Integer age) {
-        logger.info("Creating new user: {}", email);
-
-        Optional<User> existingUser = userDao.findByEmail(email);
-        if (existingUser.isPresent()) {
-            throw new IllegalArgumentException("User with email " + email + " already exists");
+    public UserDto createUser(CreateUserRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new IllegalArgumentException("User with email " + request.getEmail() + " already exists");
         }
 
-        User user = new User(name, email, age);
-        return userDao.save(user);
+        User user = new User(request.getName(), request.getEmail(), request.getAge());
+        User savedUser = userRepository.save(user);
+        return convertToDto(savedUser);
     }
 
-    public Optional<User> getUserById(Long id) {
-        logger.info("Retrieving user by id: {}", id);
-        return userDao.findById(id);
+    @Transactional(readOnly = true)
+    public UserDto getUserById(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + id));
+        return convertToDto(user);
     }
 
-    public List<User> getAllUsers() {
-        logger.info("Retrieving all users");
-        return userDao.findAll();
+    @Transactional(readOnly = true)
+    public List<UserDto> getAllUsers() {
+        return userRepository.findAll()
+                .stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
     }
 
-    public User updateUser(Long id, String name, String email, Integer age) {
-        logger.info("Updating user: {}", id);
-
-        User user = userDao.findById(id)
+    public UserDto updateUser(Long id, UpdateUserRequest request) {
+        User user = userRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + id));
 
-        if (!user.getEmail().equals(email)) {
-            Optional<User> existingUser = userDao.findByEmail(email);
-            if (existingUser.isPresent()) {
-                throw new IllegalArgumentException("User with email " + email + " already exists");
-            }
+        if (!user.getEmail().equals(request.getEmail()) &&
+                userRepository.existsByEmail(request.getEmail())) {
+            throw new IllegalArgumentException("User with email " + request.getEmail() + " already exists");
         }
 
-        user.setName(name);
-        user.setEmail(email);
-        user.setAge(age);
+        user.setName(request.getName());
+        user.setEmail(request.getEmail());
+        user.setAge(request.getAge());
 
-        return userDao.update(user);
+        User updatedUser = userRepository.save(user);
+        return convertToDto(updatedUser);
     }
 
     public void deleteUser(Long id) {
-        logger.info("Deleting user: {}", id);
-        userDao.delete(id);
+        if (!userRepository.existsById(id)) {
+            throw new IllegalArgumentException("User not found with id: " + id);
+        }
+        userRepository.deleteById(id);
+    }
+
+    private UserDto convertToDto(User user) {
+        return new UserDto(
+                user.getId(),
+                user.getName(),
+                user.getEmail(),
+                user.getAge(),
+                user.getCreatedAt()
+        );
     }
 }

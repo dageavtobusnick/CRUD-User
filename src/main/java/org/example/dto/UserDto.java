@@ -1,42 +1,37 @@
-package org.example.model;
+package org.example.dto;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
-import jakarta.persistence.Id;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Column;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
+
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "usersdata")
-public class User {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+public class UserDto {
     private Long id;
 
-    @Column(name = "name", nullable = false, length = 100)
+    @NotBlank(message = "Name is mandatory")
     private String name;
 
-    @Column(name = "email", nullable = false, unique = true, length = 150)
+    @NotBlank(message = "Email is mandatory")
+    @Email(message = "Email should be valid")
     private String email;
 
-    @Column(name = "age")
+    @NotNull(message = "Age is mandatory")
+    @PositiveOrZero(message = "Age must be positive or zero")
     private Integer age;
 
-    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    public User() {
-        this.createdAt = LocalDateTime.now();
-    }
+    // Constructors
+    public UserDto() {}
 
-    public User(String name, String email, Integer age) {
-        this();
+    public UserDto(Long id, String name, String email, Integer age, LocalDateTime createdAt) {
+        this.id = id;
         this.name = name;
         this.email = email;
         this.age = age;
+        this.createdAt = createdAt;
     }
 
     // Getters and Setters
