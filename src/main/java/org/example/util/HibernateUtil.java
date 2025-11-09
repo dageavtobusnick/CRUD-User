@@ -8,6 +8,7 @@ import org.hibernate.boot.registry.StandardServiceRegistryBuilder;
 import org.example.model.User;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.hibernate.cfg.Configuration;
 
 public class HibernateUtil {
     private static final Logger logger = LogManager.getLogger(HibernateUtil.class);
@@ -37,7 +38,29 @@ public class HibernateUtil {
 
     public static SessionFactory getSessionFactory() {
         if (sessionFactory == null) {
-            throw new IllegalStateException("SessionFactory is not initialized");
+            try {
+                Configuration configuration = new Configuration();
+
+                configuration.configure();
+
+                String url = System.getProperty("hibernate.connection.url");
+                String username = System.getProperty("hibernate.connection.username");
+                String password = System.getProperty("hibernate.connection.password");
+
+                if (url != null) {
+                    configuration.setProperty("hibernate.connection.url", url);
+                }
+                if (username != null) {
+                    configuration.setProperty("hibernate.connection.username", username);
+                }
+                if (password != null) {
+                    configuration.setProperty("hibernate.connection.password", password);
+                }
+
+                sessionFactory = configuration.buildSessionFactory();
+            } catch (Exception e) {
+                throw new ExceptionInInitializerError(e);
+            }
         }
         return sessionFactory;
     }
@@ -51,5 +74,10 @@ public class HibernateUtil {
 
     public static boolean isInitialized() {
         return sessionFactory != null;
+    }
+
+    public static void reconfigure() {
+        shutdown();
+        sessionFactory = null;
     }
 }

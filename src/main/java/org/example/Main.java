@@ -20,7 +20,6 @@ public class Main {
         logger.info("Starting User Service application");
 
         try {
-            // Проверяем инициализацию Hibernate
             if (!HibernateUtil.isInitialized()) {
                 System.err.println("Hibernate initialization failed. Application cannot start.");
                 System.exit(1);
