@@ -18,10 +18,12 @@ import java.util.stream.Collectors;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final UserEventPublisher userEventPublisher;
 
     @Autowired
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, UserEventPublisher userEventPublisher) {
         this.userRepository = userRepository;
+        this.userEventPublisher = userEventPublisher;
     }
 
     public UserDto createUser(CreateUserRequest request) {
@@ -31,6 +33,9 @@ public class UserService {
 
         User user = new User(request.getName(), request.getEmail(), request.getAge());
         User savedUser = userRepository.save(user);
+
+        userEventPublisher.publishUserEvent("CREATE", savedUser.getEmail());
+
         return UserMapper.toDto(savedUser);
     }
 
@@ -67,10 +72,14 @@ public class UserService {
     }
 
     public void deleteUser(Long id) {
-        if (!userRepository.existsById(id)) {
-            throw new IllegalArgumentException("User not found with id: " + id);
-        }
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + id));
+
+        String userEmail = user.getEmail();
         userRepository.deleteById(id);
+
+        // Отправка события в Kafka
+        userEventPublisher.publishUserEvent("DELETE", userEmail);
     }
 
 }

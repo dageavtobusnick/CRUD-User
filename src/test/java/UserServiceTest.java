@@ -4,6 +4,7 @@ import org.example.dto.UpdateUserRequest;
 import org.example.dto.UserDto;
 import org.example.model.User;
 import org.example.repository.UserRepository;
+import org.example.service.UserEventPublisher;
 import org.example.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,12 +33,14 @@ class UserServiceTest {
 
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private UserEventPublisher userEventPublisher;
 
     private UserService userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository);
+        userService = new UserService(userRepository, userEventPublisher);
     }
 
     @Test
@@ -244,20 +247,24 @@ class UserServiceTest {
     void deleteUser_ShouldDeleteUser_WhenUserExists() {
         // Arrange
         Long userId = 1L;
-        when(userRepository.existsById(userId)).thenReturn(true);
+        User user = new User("John Doe", "john@example.com", 30);
+        user.setId(userId);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         doNothing().when(userRepository).deleteById(userId);
 
         // Act & Assert
         assertDoesNotThrow(() -> userService.deleteUser(userId));
-        verify(userRepository).existsById(userId);
+        verify(userRepository).findById(userId);
         verify(userRepository).deleteById(userId);
+        verify(userEventPublisher).publishUserEvent("DELETE", user.getEmail());
     }
 
     @Test
     void deleteUser_ShouldThrowException_WhenUserNotFound() {
         // Arrange
         Long userId = 999L;
-        when(userRepository.existsById(userId)).thenReturn(false);
+        when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
         // Act & Assert
         IllegalArgumentException exception = assertThrows(
@@ -266,7 +273,8 @@ class UserServiceTest {
         );
 
         assertEquals("User not found with id: " + userId, exception.getMessage());
-        verify(userRepository).existsById(userId);
+        verify(userRepository).findById(userId);
         verify(userRepository, never()).deleteById(userId);
+        verify(userEventPublisher, never()).publishUserEvent(anyString(), anyString());
     }
 }
