@@ -3,6 +3,7 @@ package org.example.service;
 import org.example.dto.CreateUserRequest;
 import org.example.dto.UpdateUserRequest;
 import org.example.dto.UserDto;
+import org.example.mappers.UserMapper;
 import org.example.model.User;
 import org.example.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,21 +31,21 @@ public class UserService {
 
         User user = new User(request.getName(), request.getEmail(), request.getAge());
         User savedUser = userRepository.save(user);
-        return convertToDto(savedUser);
+        return UserMapper.toDto(savedUser);
     }
 
     @Transactional(readOnly = true)
     public UserDto getUserById(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + id));
-        return convertToDto(user);
+        return UserMapper.toDto(user);
     }
 
     @Transactional(readOnly = true)
     public List<UserDto> getAllUsers() {
         return userRepository.findAll()
                 .stream()
-                .map(this::convertToDto)
+                .map(UserMapper::toDto)
                 .collect(Collectors.toList());
     }
 
@@ -62,7 +63,7 @@ public class UserService {
         user.setAge(request.getAge());
 
         User updatedUser = userRepository.save(user);
-        return convertToDto(updatedUser);
+        return UserMapper.toDto(updatedUser);
     }
 
     public void deleteUser(Long id) {
@@ -72,13 +73,4 @@ public class UserService {
         userRepository.deleteById(id);
     }
 
-    private UserDto convertToDto(User user) {
-        return new UserDto(
-                user.getId(),
-                user.getName(),
-                user.getEmail(),
-                user.getAge(),
-                user.getCreatedAt()
-        );
-    }
 }
