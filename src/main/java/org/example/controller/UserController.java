@@ -72,7 +72,6 @@ public class UserController {
         UserDto userDto = userService.createUser(request);
         EntityModel<UserDto> resource = EntityModel.of(userDto);
 
-        // Add HATEOAS links
         resource.add(linkTo(methodOn(UserController.class).getUserById(userDto.getId())).withSelfRel());
         resource.add(linkTo(methodOn(UserController.class).updateUser(userDto.getId(), null)).withRel("update"));
         resource.add(linkTo(methodOn(UserController.class).deleteUser(userDto.getId())).withRel("delete"));
