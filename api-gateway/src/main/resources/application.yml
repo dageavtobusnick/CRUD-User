@@ -1,0 +1,114 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: userService
+                fallbackUri: forward:/fallback/user-service
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
+            - RewritePath=/api/users/(?<segment>.*), /api/users/$\{segment}
+            - name: Retry
+              args:
+                retries: 3
+                methods: GET
+                series: SERVER_ERROR
+
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: notificationService
+                fallbackUri: forward:/fallback/notification-service
+            - RewritePath=/api/notifications/(?<segment>.*), /api/notifications/$\{segment}
+
+        - id: user-service-direct
+          uri: lb://user-service
+          predicates:
+            - Path=/user-service/**
+          filters:
+            - StripPrefix=1
+
+        - id: notification-service-direct
+          uri: lb://notification-service
+          predicates:
+            - Path=/notification-service/**
+          filters:
+            - StripPrefix=1
+
+
+  cache:
+    type: caffeine
+  config:
+    import: "optional:configserver:http://localhost:8888"
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+    instances:
+      userService:
+        base-config: default
+      notificationService:
+        base-config: default
+
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 4s
+    instances:
+      userService:
+        base-config: default
+      notificationService:
+        base-config: default
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway,routes,circuitbreakers
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+    gateway:
+      enabled: true
+  health:
+    circuitbreakers:
+      enabled: true

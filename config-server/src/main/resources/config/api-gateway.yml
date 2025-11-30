@@ -1,0 +1,77 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: userService
+                fallbackUri: forward:/fallback/user-service
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
+            - RewritePath=/api/users/(?<segment>.*), /api/users/$\{segment}
+            - name: Retry
+              args:
+                retries: 3
+                methods: GET
+                series: SERVER_ERROR
+
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: notificationService
+                fallbackUri: forward:/fallback/notification-service
+            - RewritePath=/api/notifications/(?<segment>.*), /api/notifications/$\{segment}
+
+        - id: user-service-direct
+          uri: lb://user-service
+          predicates:
+            - Path=/user-service/**
+          filters:
+            - StripPrefix=1
+
+        - id: notification-service-direct
+          uri: lb://notification-service
+          predicates:
+            - Path=/notification-service/**
+          filters:
+            - StripPrefix=1
+
+
+  cache:
+    type: caffeine
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+    instances:
+      userService:
+        base-config: default
+      notificationService:
+        base-config: default
