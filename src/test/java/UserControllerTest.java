@@ -1,4 +1,5 @@
 
+import org.example.UserManagementApplication;
 import org.example.controller.UserController;
 import org.example.dto.CreateUserRequest;
 import org.example.dto.UpdateUserRequest;
@@ -9,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,6 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 
 @WebMvcTest(UserController.class)
+@ContextConfiguration(classes = UserManagementApplication.class)
 class UserControllerTest {
 
     @Autowired
@@ -84,10 +87,13 @@ class UserControllerTest {
 
         mockMvc.perform(get("/api/users"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].name").value("John Doe"))
-                .andExpect(jsonPath("$[1].name").value("Jane Smith"));
+                .andExpect(jsonPath("$._embedded.userDtoList.length()").value(2))
+                .andExpect(jsonPath("$._embedded.userDtoList[0].name").value("John Doe"))
+                .andExpect(jsonPath("$._embedded.userDtoList[1].name").value("Jane Smith"))
+                .andExpect(jsonPath("$._links.self.href").exists())
+                .andExpect(jsonPath("$._links.create-user.href").exists());
     }
+
 
     @Test
     void updateUser_ShouldReturnUpdatedUser() throws Exception {
