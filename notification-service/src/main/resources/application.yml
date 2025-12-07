@@ -1,0 +1,49 @@
+server:
+  port: 8082
+
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring:
+          json:
+            trusted:
+              packages: "*"
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: your-email@gmail.com
+    password: your-app-password
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+  config:
+    import: "optional:configserver:http://localhost:8888"
+
+app:
+  kafka:
+    topics:
+      user-events: user-events-topic
+  email:
+    templates:
+      welcome-subject: "Welcome to Our Platform!"
+      welcome-body: "Dear user, welcome to our platform!"
+      deletion-subject: "Account Deletion Confirmation"
+      deletion-body: "Your account has been deleted."
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      emailService:
+        register-health-indicator: true
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
