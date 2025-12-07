@@ -25,6 +25,7 @@ spring:
                 redis-rate-limiter.replenishRate: 10
                 redis-rate-limiter.burstCapacity: 20
                 redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userKeyResolver}"
             - RewritePath=/api/users/(?<segment>.*), /api/users/$\{segment}
             - name: Retry
               args:
@@ -57,6 +58,17 @@ spring:
           filters:
             - StripPrefix=1
 
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
 
   cache:
     type: caffeine
@@ -70,8 +82,43 @@ resilience4j:
         minimum-number-of-calls: 5
         failure-rate-threshold: 50
         wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
     instances:
       userService:
         base-config: default
       notificationService:
         base-config: default
+
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 4s
+    instances:
+      userService:
+        base-config: default
+      notificationService:
+        base-config: default
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway,routes,circuitbreakers
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+    gateway:
+      enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
